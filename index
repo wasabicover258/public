@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat (Classic)</title>
+  <style>
+    body { font-family: sans-serif; padding: 10px; }
+    #messages { white-space: pre-wrap; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Chat</h1>
+  <div id="messages">Nachrichten werden geladen...</div>
+  <input type="text" id="nameInput" placeholder="Name">
+  <input type="text" id="messageInput" placeholder="Nachricht eingeben">
+  <button onclick="sendMessage()">Senden</button>
+
+  <script>
+    var DB_URL = "https://chat-586a3-default-rtdb.europe-west1.firebasedatabase.app/messages.json";
+    const MAX_MESSAGES = 5; // Maximale Anzahl der Nachrichten
+
+    // Funktion zum Laden der Nachrichten
+    function loadMessages() {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", DB_URL, true);
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          if (xhr.status === 200) {
+            try {
+              var data = JSON.parse(xhr.responseText);
+              var text = '';
+              var messages = [];
+
+              // Nachrichten in ein Array speichern, um sie sortieren zu können
+              for (var key in data) {
+                if (data[key] && data[key].name && data[key].text) {
+                  messages.push({ id: key, name: data[key].name, text: data[key].text });
+                }
+              }
+
+              // Sortiere Nachrichten nach ID (älteste zuerst)
+              messages.sort(function(a, b) {
+                return a.id.localeCompare(b.id); // Aufsteigend nach ID sortieren
+              });
+
+              // Die letzten MAX_MESSAGES Nachrichten anzeigen
+              var messageCount = 0;
+              for (var i = 0; i < messages.length && messageCount < MAX_MESSAGES; i++) {
+                text += messages[i].name + ": " + messages[i].text + "\n";
+                messageCount++;
+              }
+
+              document.getElementById('messages').textContent = text || "Noch keine Nachrichten.";
+            } catch (e) {
+              document.getElementById('messages').textContent = "Fehler beim Verarbeiten der Nachrichten.";
+            }
+          } else {
+            document.getElementById('messages').textContent = "Fehler beim Laden der Nachrichten.";
+          }
+        }
+      };
+      xhr.send();
+    }
+
+    // Nachricht senden
+    function sendMessage() {
+      var name = document.getElementById('nameInput').value.trim() || "Gast";
+      var text = document.getElementById('messageInput').value.trim();
+      if (!text) return;
+
+      // Neue Nachricht in die Firebase-Datenbank senden
+      var message = JSON.stringify({ name: name, text: text });
+
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", DB_URL, true);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          // Jetzt alle Nachrichten neu laden
+          loadMessages();
+          // Sobald eine neue Nachricht gesendet wurde, alte Nachrichten löschen, wenn mehr als MAX_MESSAGES vorhanden sind
+          cleanUpMessages();
+        }
+      };
+      xhr.send(message);
+    }
+
+    // Funktion, um alte Nachrichten zu löschen, wenn mehr als MAX_MESSAGES vorhanden sind
+    function cleanUpMessages() {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", DB_URL, true);
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          if (xhr.status === 200) {
+            try {
+              var data = JSON.parse(xhr.responseText);
+              var messageCount = 0;
+              for (var key in data) {
+                messageCount++;
+              }
+              if (messageCount > MAX_MESSAGES) {
+                // Lösche die älteste Nachricht
+                var oldestMessageKey = Object.keys(data)[0]; // Die älteste Nachricht ist die erste
+                var deleteUrl = `https://chat-586a3-default-rtdb.europe-west1.firebasedatabase.app/messages/${oldestMessageKey}.json`;
+                
+                var deleteXhr = new XMLHttpRequest();
+                deleteXhr.open("DELETE", deleteUrl, true);
+                deleteXhr.send();
+              }
+            } catch (e) {
+              console.log("Fehler beim Löschen alter Nachrichten:", e);
+            }
+          }
+        }
+      };
+      xhr.send();
+    }
+
+    // Nachrichten alle 5 Sekunden laden
+    loadMessages();
+    setInterval(loadMessages, 5000);
+  </script>
+</body>
+</html>
